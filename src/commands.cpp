@@ -76,6 +76,58 @@ void ParseWeaponCommand(CCSPlayerController *pController, const char *pszWeaponN
 	}
 }
 
+public Action CommandResetScore(int client, int args)
+{
+	if (GetConVarInt(hPluginEnable) == 0)
+	{
+		CPrintToChat(client, "{green}%s\x01%t", g_Prefix, "Plugin Disabled");
+		return Plugin_Continue;
+	}
+
+	if (GetClientDeaths(client) == 0 && GetClientFrags(client) == 0 && CS_GetMVPCount(client) == 0)
+	{
+		if (!CSGO || CS_GetClientAssists(client) == 0)
+		{
+			CPrintToChat(client, "{green}%s\x01%t", g_Prefix, "Score 0");
+			return Plugin_Continue;
+		}
+	}
+
+	int cost  = GetConVarInt(hResetCost);
+	int money = GetEntProp(client, Prop_Send, "m_iAccount");
+	if (cost > 0 && money < cost)
+	{
+		CPrintToChat(client, "{green}%s\x01%t", g_Prefix, "No Money", cost);
+		return Plugin_Continue;
+	}
+
+	ResetPlayer(client);
+	SetEntProp(client, Prop_Send, "m_iAccount", money - cost);
+
+	char name[MAX_NAME_LENGTH];
+	GetClientName(client, name, sizeof(name));
+	if (GetConVarInt(hPublic) == 1)
+	{
+		if (GetClientTeam(client) == 2)
+		{
+			CPrintToChatAll("{green}%s\x01%t", g_Prefix, "Player Reset Red", name);
+		}
+		else if (GetClientTeam(client) == 3)
+		{
+			CPrintToChatAll("{green}%s\x01%t", g_Prefix, "Player Reset Blue", name);
+		}
+		else
+		{
+			CPrintToChatAll("{green}%s\x01%t", g_Prefix, "Player Reset Normal", name);
+		}
+	}
+	else
+	{
+		CPrintToChat(client, "{green}%s\x01%t", g_Prefix, "You Reset");
+	}
+	return Plugin_Continue;
+}
+
 void ParseChatCommand(const char *pMessage, CCSPlayerController *pController)
 {
 	if (!pController)
@@ -122,41 +174,9 @@ void ClientPrint(CBasePlayerController *player, int hud_dest, const char *msg, .
 	addresses::ClientPrint(player, hud_dest, buf, nullptr, nullptr, nullptr, nullptr);
 }
 
-CON_COMMAND_CHAT(stopsound, "stop weapon sounds")
-{
-	if (!player)
-		return;
-
-	int iPlayer = player->entindex() - 1;
-
-	ZEPlayer *pZEPlayer = g_playerManager->GetPlayer(iPlayer);
-
-	// Something has to really go wrong for this to happen
-	if (!pZEPlayer)
-	{
-		Warning("%s Tried to access a null ZEPlayer!!\n", player->m_iszPlayerName());
-		return;
-	}
-
-	pZEPlayer->ToggleStopSound();
-
-	ClientPrint(player, HUD_PRINTTALK, " \7[CS2Fixes]\1 You have toggled weapon effects.");
-}
-
 CON_COMMAND_CHAT(say, "say something using console")
 {
 	ClientPrintAll(HUD_PRINTTALK, "%s", args.ArgS());
-}
-
-CON_COMMAND_CHAT(takemoney, "take your money")
-{
-	if (!player)
-		return;
-
-	int amount = atoi(args[1]);
-	int money = player->m_pInGameMoneyServices()->m_iAccount();
-
-	player->m_pInGameMoneyServices()->m_iAccount(money - amount);
 }
 
 CON_COMMAND_CHAT(message, "message someone")
@@ -215,31 +235,6 @@ CON_COMMAND_CHAT(test_target, "test string targetting")
 	}
 }
 
-CON_COMMAND_CHAT(getorigin, "get your origin")
-{
-	if (!player)
-		return;
-
-	Vector vecAbsOrigin = player->m_hPawn()->GetAbsOrigin();
-
-	ClientPrint(player, HUD_PRINTTALK, " \7[CS2Fixes]\1 Your origin is %f %f %f", vecAbsOrigin.x, vecAbsOrigin.y, vecAbsOrigin.z);
-}
-
-CON_COMMAND_CHAT(setorigin, "set your origin")
-{
-	if (!player)
-		return;
-
-	CBasePlayerPawn *pPawn = player->m_hPawn();
-
-	Vector vecNewOrigin;
-	V_StringToVector(args.ArgS(), vecNewOrigin);
-
-	pPawn->SetAbsOrigin(vecNewOrigin);
-
-	ClientPrint(player, HUD_PRINTTALK, " \7[CS2Fixes]\1 Your origin is now %f %f %f", vecNewOrigin.x, vecNewOrigin.y, vecNewOrigin.z);
-}
-
 CON_COMMAND_CHAT(getstats, "get your stats")
 {
 	if (!player)
@@ -251,16 +246,6 @@ CON_COMMAND_CHAT(getstats, "get your stats")
 	ClientPrint(player, HUD_PRINTTALK, " \7[CS2Fixes]\1 Deaths: %d", stats.m_iDeaths());
 	ClientPrint(player, HUD_PRINTTALK, " \7[CS2Fixes]\1 Assists: %d", stats.m_iAssists());
 	ClientPrint(player, HUD_PRINTTALK, " \7[CS2Fixes]\1 Damage: %d", stats.m_iDamage());
-}
-
-CON_COMMAND_CHAT(setkills, "set your kills")
-{
-	if (!player)
-		return;
-
-	player->m_pActionTrackingServices()->m_matchStats().m_iKills(atoi(args[1]));
-
-	ClientPrint(player, HUD_PRINTTALK, " \7[CS2Fixes]\1 You have set your kills to %d.", atoi(args[1]));
 }
 
 // Lookup a weapon classname in the weapon map and "initialize" it.
